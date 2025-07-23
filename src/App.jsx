@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Filter, ChevronDown, Trash2, CheckCircle, ArrowRight, Edit, Download } from 'lucide-react'; // Added Edit and Download icons
+import { Plus, X, Filter, ChevronDown, Trash2, CheckCircle, ArrowRight, Edit, Download, Loader2 } from 'lucide-react'; // Added Loader2 icon
 
 // Helper function to format date to YYYY-MM-DD
 const formatDate = (date) => {
@@ -47,6 +47,9 @@ const App = () => {
   // Display totals
   const [currentPeriodTotal, setCurrentPeriodTotal] = useState(0);
 
+  // Loading state
+  const [loading, setLoading] = useState(true); // Initial loading state
+
   const categoryOptions = ['Food', 'Transport', 'Bills', 'Misc', 'Entertainment', 'Shopping'];
 
   // Refs for filter dropdowns to handle clicks outside
@@ -60,14 +63,25 @@ const App = () => {
 
   // Load expenses from localStorage on initial mount
   useEffect(() => {
-    try {
-      const storedExpenses = JSON.parse(localStorage.getItem('quickbill_expenses')) || [];
-      setExpenses(storedExpenses);
-    } catch (e) {
-      console.error("Failed to load expenses from localStorage:", e);
-      setExpenses([]); // Reset if corrupted
+    setLoading(true); // Start loading
+    const loadData = () => {
+      try {
+        const storedExpenses = JSON.parse(localStorage.getItem('quickbill_expenses')) || [];
+        setExpenses(storedExpenses);
+      } catch (e) {
+        console.error("Failed to load expenses from localStorage:", e);
+        setExpenses([]); // Reset if corrupted
+      } finally {
+        setTimeout(() => setLoading(false), 500); // Simulate a small delay for loading
+      }
+    };
+
+    if (onboardingStep === null) { // Only load if onboarding is done
+      loadData();
+    } else {
+      setLoading(false); // No loading spinner if still on onboarding
     }
-  }, []);
+  }, [onboardingStep]); // Depend on onboardingStep to trigger load after completion
 
   // Save expenses to localStorage whenever 'expenses' state changes
   useEffect(() => {
@@ -79,6 +93,7 @@ const App = () => {
   useEffect(() => {
     calculateCurrentPeriodSpending(expenses, timePeriodFilter);
   }, [timePeriodFilter, expenses]); // Depend on expenses too for initial load
+
 
   // Calculate spending for the selected period
   const calculateCurrentPeriodSpending = (currentExpenses, period) => {
@@ -116,6 +131,19 @@ const App = () => {
   const handleCompleteOnboarding = () => {
     localStorage.setItem('quickbill_onboarding_complete', 'true');
     setOnboardingStep(null); // Hide onboarding
+    // Trigger initial data load after onboarding is complete
+    setLoading(true);
+    setTimeout(() => {
+        try {
+            const storedExpenses = JSON.parse(localStorage.getItem('quickbill_expenses')) || [];
+            setExpenses(storedExpenses);
+        } catch (e) {
+            console.error("Failed to load expenses from localStorage:", e);
+            setExpenses([]);
+        } finally {
+            setLoading(false);
+        }
+    }, 500); // Simulate load time
   };
 
   const handleSkipOnboarding = () => {
@@ -131,30 +159,34 @@ const App = () => {
       return;
     }
 
-    if (editingExpenseId) {
-      // Update existing expense
-      setExpenses(prevExpenses => prevExpenses.map(exp =>
-        exp.id === editingExpenseId
-          ? { ...exp, title, amount: parseFloat(amount).toFixed(2), category }
-          : exp
-      ));
-      setEditingExpenseId(null); // Exit editing mode
-    } else {
-      // Add new expense
-      const newExpense = {
-        id: Date.now(),
-        title,
-        amount: parseFloat(amount).toFixed(2),
-        category,
-        date: formatDate(new Date()),
-      };
-      setExpenses(prevExpenses => [newExpense, ...prevExpenses]); // Add to top
-    }
+    setLoading(true); // Start loading spinner
+    setTimeout(() => { // Simulate delay
+      if (editingExpenseId) {
+        // Update existing expense
+        setExpenses(prevExpenses => prevExpenses.map(exp =>
+          exp.id === editingExpenseId
+            ? { ...exp, title, amount: parseFloat(amount).toFixed(2), category }
+            : exp
+        ));
+        setEditingExpenseId(null); // Exit editing mode
+      } else {
+        // Add new expense
+        const newExpense = {
+          id: Date.now(),
+          title,
+          amount: parseFloat(amount).toFixed(2),
+          category,
+          date: formatDate(new Date()),
+        };
+        setExpenses(prevExpenses => [newExpense, ...prevExpenses]); // Add to top
+      }
 
-    // Reset form fields
-    setTitle('');
-    setAmount('');
-    setCategory('Food');
+      // Reset form fields
+      setTitle('');
+      setAmount('');
+      setCategory('Food');
+      setLoading(false); // End loading spinner
+    }, 500); // 500ms delay
   };
 
   const handleEditExpense = (expense) => {
@@ -167,18 +199,26 @@ const App = () => {
 
   const handleDeleteExpense = (id) => {
     if (window.confirm('Are you sure you want to delete this expense?')) {
-      setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== id));
+      setLoading(true); // Start loading spinner
+      setTimeout(() => { // Simulate delay
+        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== id));
+        setLoading(false); // End loading spinner
+      }, 300); // 300ms delay
     }
   };
 
   const handleClearAllData = () => {
     if (window.confirm('Are you sure you want to clear ALL your QuickBill data? This cannot be undone.')) {
-      localStorage.removeItem('quickbill_expenses');
-      setExpenses([]);
-      setCurrentPeriodTotal(0);
-      setFilterCategory('All');
-      setTimePeriodFilter('Today');
-      alert('All data cleared!');
+      setLoading(true); // Start loading spinner
+      setTimeout(() => { // Simulate delay
+        localStorage.removeItem('quickbill_expenses');
+        setExpenses([]);
+        setCurrentPeriodTotal(0);
+        setFilterCategory('All');
+        setTimePeriodFilter('Today');
+        alert('All data cleared!');
+        setLoading(false); // End loading spinner
+      }, 700); // 700ms delay
     }
   };
 
@@ -225,32 +265,36 @@ const App = () => {
       return;
     }
 
-    const headers = ["Title", "Amount", "Category", "Date"];
-    const csvRows = [];
+    setLoading(true); // Start loading spinner
+    setTimeout(() => { // Simulate delay
+      const headers = ["Title", "Amount", "Category", "Date"];
+      const csvRows = [];
 
-    // Add headers
-    csvRows.push(headers.join(','));
+      // Add headers
+      csvRows.push(headers.join(','));
 
-    // Add data rows
-    for (const expense of displayedExpenses) {
-      const row = [
-        `"${expense.title.replace(/"/g, '""')}"`, // Escape double quotes
-        expense.amount,
-        expense.category,
-        expense.date,
-      ];
-      csvRows.push(row.join(','));
-    }
+      // Add data rows
+      for (const expense of displayedExpenses) {
+        const row = [
+          `"${expense.title.replace(/"/g, '""')}"`, // Escape double quotes
+          expense.amount,
+          expense.category,
+          expense.date,
+        ];
+        csvRows.push(row.join(','));
+      }
 
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `QuickBill_Expenses_${formatDate(new Date())}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    alert("Expenses exported successfully!");
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `QuickBill_Expenses_${formatDate(new Date())}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      alert("Expenses exported successfully!");
+      setLoading(false); // End loading spinner
+    }, 700); // 700ms delay
   };
 
 
@@ -338,6 +382,14 @@ const App = () => {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         `}
       </style>
+
+      {/* Global Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+          <Loader2 className="w-12 h-12 text-blue-400 animate-spin" />
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header and Daily/Period Total */}
         <header className="flex flex-col sm:flex-row items-center justify-between bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
@@ -385,6 +437,7 @@ const App = () => {
               onChange={(e) => setTitle(e.target.value)}
               className="col-span-1 sm:col-span-2 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              disabled={loading}
             />
             <input
               type="number"
@@ -394,11 +447,13 @@ const App = () => {
               className="p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               step="0.01"
               required
+              disabled={loading}
             />
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
             >
               {categoryOptions.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -407,7 +462,9 @@ const App = () => {
             <button
               type="submit"
               className={`col-span-1 sm:col-span-2 py-3 rounded-lg font-semibold shadow-md flex items-center justify-center gap-2
-                ${editingExpenseId ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'} text-white transition-all duration-200`}
+                ${editingExpenseId ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'} text-white transition-all duration-200
+                ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={loading}
             >
               {editingExpenseId ? <Edit size={20} /> : <Plus size={20} />}
               {editingExpenseId ? 'Update Expense' : 'Add Expense'}
@@ -421,6 +478,7 @@ const App = () => {
             <button
               onClick={() => setIsCategoryFilterOpen(!isCategoryFilterOpen)}
               className="w-full sm:w-48 bg-gray-700 text-gray-200 py-2 px-4 rounded-lg flex items-center justify-between hover:bg-gray-600 transition-all duration-200 shadow-sm border border-gray-600"
+              disabled={loading}
             >
               <Filter size={18} className="mr-2" />
               Filter by: {filterCategory}
@@ -450,13 +508,17 @@ const App = () => {
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <button
               onClick={handleExportCSV}
-              className="w-full sm:w-auto bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 shadow-md flex items-center justify-center gap-2"
+              className={`w-full sm:w-auto bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 shadow-md flex items-center justify-center gap-2
+                ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={loading}
             >
               <Download size={18} /> Export CSV
             </button>
             <button
               onClick={handleClearAllData}
-              className="w-full sm:w-auto bg-red-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-700 transition-all duration-200 shadow-md flex items-center justify-center gap-2"
+              className={`w-full sm:w-auto bg-red-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-700 transition-all duration-200 shadow-md flex items-center justify-center gap-2
+                ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={loading}
             >
               <Trash2 size={18} /> Clear All Data
             </button>
@@ -489,10 +551,10 @@ const App = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-gray-400 text-sm">{expense.date}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-gray-400">
                         <div className="flex space-x-2">
-                          <button onClick={() => handleEditExpense(expense)} className="text-blue-400 hover:text-blue-300">
+                          <button onClick={() => handleEditExpense(expense)} className="text-blue-400 hover:text-blue-300" disabled={loading}>
                             <Edit size={18} />
                           </button>
-                          <button onClick={() => handleDeleteExpense(expense.id)} className="text-red-400 hover:text-red-300">
+                          <button onClick={() => handleDeleteExpense(expense.id)} className="text-red-400 hover:text-red-300" disabled={loading}>
                             <Trash2 size={18} />
                           </button>
                         </div>
